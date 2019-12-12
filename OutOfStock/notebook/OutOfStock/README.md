@@ -1,5 +1,6 @@
 ## Out Of Stock Model
 
+[Data folder structure and output files format](https://github.com/YiranJing/Lagardere_CommercialAnalysis/tree/master/OutOfStock/notebook/OutOfStock/support)
 ### Business Obejctive
 - Automatically check and report 'out of stock' items in the last 7 days, running on last 30 days data
 - Estimating the possible loss due to OOS
