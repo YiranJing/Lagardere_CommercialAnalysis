@@ -4,7 +4,7 @@
 ### Business Obejctive
 - Automatically check and report 'out of stock' items in the last 7 days, running on last 30 days data
 - Estimating the possible loss due to OOS
-- Further analysis on the items, which are OOS full week. 
+- Further analysis on the items of OOS 7 days
 
 ### How to run the code
 Open terminal (Mac)/command (Window)
