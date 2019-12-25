@@ -85,10 +85,6 @@
 ### Identify removed Items
 
 
-```python
-
-```
-
     +--------------------+-------+--------+----------+--------------+-----+----------+------------+-------+----------+--------+
     |                 SKU|Facings|Capacity|DaysSupply|Classification|month|avgNetSale|avgGrossSale|avgCOGS|avgQtySold|avgPrice|
     +--------------------+-------+--------+----------+--------------+-----+----------+------------+-------+----------+--------+
@@ -162,7 +158,7 @@ Also, since $discount = GS - NS$, and GS includes similar info with NS, so there
 
 
 
-![png](images/utput_14_1.png)
+![png](images/output_14_1.png)
 
 
 From 9 box plots above we can see that:
@@ -235,12 +231,7 @@ From three plots above, we can see that:
 #### COGS plot
 
 
-```python
-
-```
-
-
-![png](output_31_0.png)
+![png](images/output_31_0.png)
 
 
 
@@ -249,4 +240,4 @@ highCOGS = month_merge[month_merge.avgCOGS < -1000 ]
 ```
 
 
-![png](output_32_0.png)
+![png](images/output_32_0.png)
