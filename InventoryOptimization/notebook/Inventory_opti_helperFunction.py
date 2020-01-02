@@ -168,3 +168,99 @@ def find_too_high_facing_items(df, class_choice = 'Classification'):
     plt.show()
     
     return high_facing
+
+
+############
+## Group SKU
+############
+def find_monthly_qty_less_items_4_group(df, column, class_choice = 'Classification'):
+    """
+    Identify items whose facing or capacity is more than monthly sold qty
+    
+    class_choice: Classification or Subcateogory
+    """
+    #################
+    # Separate group
+    #################
+    # group 0: monthly total qty sold is no less than class_choice
+    df0 = df.withColumn('qty_less_than_facing', when((col("totalQtySold") > col(column)) , 1).otherwise(0))
+    df0  = df0.filter(df0.qty_less_than_facing == 1)
+    
+    # group 4: facing > (monthly total sold qty *4)
+    df4 = df.withColumn('qty_less_than_facing4', when((col("totalQtySold")* 4 < col(column)) , 1).otherwise(0))
+    df4  = df4.filter(df4.qty_less_than_facing4 == 1)
+    
+    # group 3: (monthly total sold qty *4) > facing > (monthly total sold qty *3)
+    df3 = group_data_by_threshold(column, df, 3, 4)
+    
+    # group 2: (monthly total sold qty *3) > facing > (monthly total sold qty *2)
+    df2 = group_data_by_threshold(column, df, 2, 3)
+    
+    # group 1: (monthly total sold qty *2) > facing > (monthly total sold qty *1)
+    df1 = group_data_by_threshold(column, df, 1, 2)
+    
+    print()
+    print("(monthly total sold qty *2) > facing >= (monthly total sold qty *1)")
+    plot_monthly_data(df1, "SubCategory", column)
+    plot_monthly_bar_plot(df1, "SubCategory", column)
+    print()
+    
+    print("(monthly total sold qty *3) > facing >= (monthly total sold qty *2)")
+    plot_monthly_data(df2, "SubCategory", column)
+    plot_monthly_bar_plot(df2, "SubCategory", column)
+    print()
+    
+    print("(monthly total sold qty *4) > facing >= (monthly total sold qty *3)")
+    plot_monthly_data(df3, "SubCategory", column)
+    plot_monthly_bar_plot(df3, "SubCategory", column)
+    print()
+    
+    print("facing > (monthly total sold qty *4)")
+    plot_monthly_data(df4, "SubCategory", column)
+    plot_monthly_bar_plot(df4, "SubCategory", column)
+    
+    return df1
+
+def group_data_by_threshold(column, df, lowerbd, upperbd):
+    df1 = df.withColumn('qty_less_than_facing1', when((col("totalQtySold")* lowerbd < col(column)) , 1).otherwise(0))
+    df1  = df1.filter(df1.qty_less_than_facing1 == 1)
+    df1 = df1.withColumn('qty_less_than_facing2', when((col("totalQtySold")* upperbd >= col(column)) , 1).otherwise(0))
+    df1  = df1.filter(df1.qty_less_than_facing2 == 1)
+    
+    print("There are {} items under lowerbound {}, upperbound {}".format(df1.select("SKU").distinct().count(),
+                                                                        lowerbd, upperbd))
+    return df1
+
+def plot_monthly_data(df, class_choice, column):
+    
+    pdf = df.toPandas() 
+    # draw monthly plot
+    g = sns.catplot(x=column, y="totalQtySold", hue=class_choice, col="month",data=pdf)
+    plt.show()
+    
+def plot_monthly_bar_plot(df, class_choice, column):
+    
+    df = df.toPandas() 
+    
+    fig, axes = plt.subplots(figsize=(15,5))
+    df1 = pd.DataFrame(df.groupby([class_choice,'month'])['SellMargin'].sum()).reset_index()
+    axes = sns.barplot(x=class_choice, y='SellMargin', hue='month', data=df1)
+    plt.show()
+    
+    fig, axes = plt.subplots(figsize=(15,5))
+    df2 = pd.DataFrame(df.groupby([class_choice,'month'])['totalNetSale'].sum()).reset_index()
+    axes = sns.barplot(x=class_choice, y='totalNetSale', hue='month', data=df2)
+    plt.show()
+    
+    fig, axes = plt.subplots(figsize=(15,5))
+    df3 = pd.DataFrame(df.groupby([class_choice,'month'])['Facings'].sum()).reset_index()
+    axes = sns.barplot(x=class_choice, y='Facings', hue='month', data=df3)
+    plt.show()
+    
+    fig, axes = plt.subplots(figsize=(15,5))
+    df4 = pd.DataFrame(df.groupby([class_choice,'month'])['totalQtySold'].sum()).reset_index()
+    axes = sns.barplot(x=class_choice, y='totalQtySold', hue='month', data=df4)
+    plt.show()
+    
+    fig.tight_layout()
+    plt.show()
