@@ -53,7 +53,7 @@ def clean_dataset(df: pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.
     return df 
 
 
-def convertColumn(df, names, newType) -> pyspark.sql.dataframe.DataFrame:
+def convertColumn(df: pyspark.sql.dataframe.DataFrame, names: object, newType: object) -> object:
     """
     Convert the data type of DataFrame columns
     """
@@ -115,8 +115,7 @@ def calculate_material_change(dataset: Dataset) -> pyspark.sql.dataframe.DataFra
                 1. for the item by Store in W1, but not in W2
                 2. avgSales_lastWeek < sumSales_oldWeek (e.g w1 > w2)
             False:
-                the left cases. 
-            
+                the left cases.     
             Note: 
                 1. For the case: sumSales_oldWeek = 0, avgSales_lastWeek<0, in_W1_not_W2, material_change = ''
     """
@@ -248,8 +247,3 @@ def calculate_range_expansion(dataset: Dataset) -> pyspark.sql.dataframe.DataFra
     output1 = output1.fillna("None", subset=['Date'])
     output1 = dataset.df.join(output1, on = ['SKU', 'Store','Date'], how = 'left')
     return output1
-    
-
-
-
-
