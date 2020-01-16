@@ -6,7 +6,7 @@ Main tasks I did during this Data Scientist Internship in lagardere commercial a
 
 ***
 ## Inventory Optimization
-[See the process](https://github.com/YiranJing/Lagardere_CommercialAnalysis/projects/2)
+
 #### Motivation:
 From one side, we want to avoid costly shortages, on the other hand, Inventory consumes space, gets damaged, and sometimes becomes obsolete — and carrying surplus inventory costs the organization. Simply, optimizing inventory means finding the perfect balance between demand and supply including `facing`, and `capacity`.
 
@@ -27,9 +27,35 @@ From one side, we want to avoid costly shortages, on the other hand, Inventory c
 
 ***
 ## [Out of Stock model](https://github.com/YiranJing/Lagardere_CommercialAnalysis/tree/master/OutOfStock)
-Will update new version using more efficienct algo with pyspark 
+Using Spark with SQL join to improve the data processing efficiency
+
+### Business Obejctive
+- Automatically check and report 'out of stock' items in the last 7 days, running on last 30 days data
+- Estimating the possible `margin loss` and `net sale loss`due to OOS
+- Identify `removed product`, `new product`
+- Identify the `store`, which has the significant OOS issue
+- Identify the `product`, which commonly OOS in multiple stores.
+- Visualization on Power BI: Further analysis on the items which are out of stock in the past 7 days
+
+### Output
+#### 1. Total OOS items
+Location: `data/output` folder
+
+#### 2. Analysis of OOS 7 days items
+Location: `data/output/OOS_7_days_analysis`
+
+#### 3. Figures & Tables
+PowerBI
+
+
 ***
-## [Rank Analysis]
+## Rank Analysis
+### Business Objective
+- Based on sales of all categories, we firstly develop `overall rank` and `rank of each store` for each SKU
+- Based on new defined `concept` and `top 50 rank SKU`, we calculate `material_change`, `newcomer`, `unadressed_gap` and `range_expansion`
+- Build dashboard to visualization
+
+### Steps
 - Stage 1: Query data from Datawarehouse
 - Stage 2: Calculate `rank` and `new concept`
 - Stage 3: [More analysis and test output](https://github.com/YiranJing/Lagardere_CommercialAnalysis/tree/master/RankAnalysis/notebook)
