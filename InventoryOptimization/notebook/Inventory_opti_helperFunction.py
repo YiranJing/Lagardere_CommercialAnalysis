@@ -21,12 +21,10 @@ from pyspark.sql.functions import *
 from pyspark.sql import Row
 import pandas
 import pyspark
+from pandas import ExcelWriter
 #from pyspark.sql.functions import when
 from pyspark.sql.functions import UserDefinedFunction
 import re
-
-
-
 
 
 ###############################
@@ -40,38 +38,96 @@ def pie_chart_margin(column: str, df: pandas.core.frame.DataFrame, title1: str, 
     """
 
     df1 = pd.DataFrame(df.groupby('Classification')[column].sum())
-    df2 = pd.DataFrame(df.groupby('Classification')[column].sum())
     df3 = pd.DataFrame(df.groupby('Classification')['totalMonthlyNetSale'].sum())
-    df4 = df2['SellMargin']/df3['totalMonthlyNetSale']
+    df4 = df1['SellMargin']/df3['totalMonthlyNetSale']
+    print(df3.reset_index())
+    print('\nSell Margin % means: TotalSellMargin / totalMonthlyNetSale within classifiction ')
     
     labels = df1.index
     fig, axes = plt.subplots(nrows=1, ncols=3, figsize=(15,5))
     # plot 1
     sizes1 = df1[column] 
-    axes[0].pie(sizes1, explode=explode, labels=labels, autopct='%1.2f%%',
+    axes[0].pie(sizes1, explode=explode, labels=labels, autopct='%1.1f%%',
             shadow=True, startangle=90)
     axes[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
     axes[0].set_title(title1, fontsize=15)
     
     # plot 2
-    axes[1].pie(df4, explode=explode, labels=labels, autopct='%1.2f%%',
-            shadow=True, startangle=90)
-    axes[1].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
-    axes[1].set_title(title2, fontsize=15)
     
-    # plot 4
-    df5 = pd.DataFrame(df.groupby(['Classification','month'])[column].sum()).reset_index()
+    sns.barplot(x = "Classification", y = df4.reset_index().columns[1], 
+                             data=df4.reset_index(), ax = axes[1])
+    axes[1].set_title(title2, fontsize=15)
+    axes[1].set_ylabel('% SellMargin / totalMonthlyNetSale of this Classification', fontsize=12)
+    
+    #axes[1].pie(df4, explode=explode, labels=labels, autopct='%1.1f%%',
+            #shadow=True, startangle=90)
+    #axes[1].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    #axes[1].set_title(title2, fontsize=15)
+    
+    # plot 3
     axes[2] = sns.boxplot(x="Classification", y=column, data=df)
     axes[2] = sns.swarmplot(x="Classification", y=column, data=df, color=".25")
-    axes[2].set_title(title2, fontsize=15)
+    axes[2].set_title('Sell Margin Details', fontsize=15)
     
     fig.tight_layout()
     plt.show()
     
+def pie_chart_margin_selectedItem(column: str, pdf: pandas.core.frame.DataFrame, 
+                                  df: pandas.core.frame.DataFrame, title1: str, title2: str, explode: tuple):
+    
+    """
+    GroupBy Classification, visualization by margin for selected Item
+    pdf: the full version of dataset
+    df: selected items
+    """
+
+    df1 = pd.DataFrame(df.groupby('Classification')[column].sum())
+    df2 = pd.DataFrame(pdf.groupby('Classification')['SellMargin'].sum())
+    df3 = pd.DataFrame(df.groupby('Classification')['totalMonthlyNetSale'].sum())
+    df4 = df1['SellMargin']/df2['SellMargin']
+    df5 = pd.DataFrame(df.groupby(['Classification','month'])[column].sum()).reset_index()
+    print('There are {} DISTINCT items'.format(df['SKU'].nunique()))
+    
+    print(df3.reset_index())
+    print()
+    print('⭐️Sell Margin % means: SumSellMarginselected items / SumSellMargin of all items within classifiction ')
+    
+    labels = df1.index
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(18,15))
+    # plot 1
+    sizes1 = df1[column] 
+    axes[0,0].pie(sizes1, explode=explode, labels=labels, autopct='%1.1f%%',
+            shadow=True, startangle=90)
+    axes[0,0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    axes[0,0].set_title(title1, fontsize=15)
+    
+    # plot 2
+    sns.barplot(x = "Classification", y = df4.reset_index().columns[1], 
+                             data=df4.reset_index(), ax = axes[0,1])
+    axes[0,1].set_title(title2, fontsize=15)
+    axes[0,1].set_ylabel('% SellMargin of selected items / SellMargin of all items within classifiction', fontsize=12)
+    
     # plot 3
-    g = sns.factorplot(x = "Classification", y = column, 
-                             data=df5, kind='bar', hue = 'month')
-    g.fig.suptitle(title1, fontsize=15)
+    sns.barplot(x = "Classification", y = column, 
+                             data=df5, hue = 'month', ax = axes[1,0])
+    axes[1,0].set_title(title1, fontsize=15)
+    
+    # plot 4
+    axes[2,1] = sns.boxplot(x="Classification", y=column, data=df)
+    axes[2,1] = sns.swarmplot(x="Classification", y=column, data=df, color=".25")
+    axes[2,1].set_title('Sell Margin Details of items whose capacity > monthly sold Qty in three month', fontsize=15)
+    
+    # plot 5
+    sns.barplot(x ="Classification", y = "Capacity_to_qty", hue = 'month',
+                             data=df, ax = axes[2,0])
+    axes[2,0].set_title("Capacity to qty of items whose capacity > monthly sold Qty in three month", fontsize=15)
+    
+    # plot 6
+    sns.barplot(x ="Classification", y = "Capacity_to_sales", hue = 'month',
+                             data=df, ax = axes[1,1])
+    axes[1,1].set_title("Capacity to Net Sales of items whose capacity > monthly sold Qty in three month", fontsize=15)
+    
+    fig.tight_layout()
     plt.show()
     
 
@@ -103,14 +159,14 @@ def pie_chart_classification(column: str, df: pandas.core.frame.DataFrame, title
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=(15, 5))
     # plot 1
     sizes1 = df1[column] 
-    axes[0].pie(sizes1, explode=explode, labels=labels, autopct='%1.2f%%',
+    axes[0].pie(sizes1, explode=explode, labels=labels, autopct='%1.1f%%',
             shadow=True, startangle=90)
     axes[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
     axes[0].set_title(title1, fontsize=15)
     
     # plot 2
     sizes2 = df2[column] 
-    axes[1].pie(sizes2, explode=explode, labels=labels, autopct='%1.2f%%',
+    axes[1].pie(sizes2, explode=explode, labels=labels, autopct='%1.1f%%',
             shadow=True, startangle=90)
     axes[1].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
     axes[1].set_title(title2, fontsize=15)
@@ -119,14 +175,14 @@ def pie_chart_classification(column: str, df: pandas.core.frame.DataFrame, title
     plt.show()
     
     # plot 3
-    fig, axes = plt.subplots(figsize=(10, 5))
+    fig, axes = plt.subplots(figsize=(15, 5))
     df1 = pd.DataFrame(df.groupby([calss_choice,'month'])[column].sum()).reset_index()
     axes = sns.barplot(x=calss_choice, y=column, hue = 'month', data=df1)
     axes.set_title(title1, fontsize=15)
     plt.show()
     
     # plot 4
-    fig, axes = plt.subplots(figsize=(10, 5))
+    fig, axes = plt.subplots(figsize=(15, 5))
     df2 = pd.DataFrame(df.groupby([calss_choice,'month'])[column].mean()).reset_index()
     axes = sns.barplot(x=calss_choice, y=column, hue = 'month', data=df2)
     axes.set_title(title2, fontsize=15)
@@ -138,46 +194,232 @@ def pie_chart_classification(column: str, df: pandas.core.frame.DataFrame, title
     print("------------------------------------------------------------------")
 
 ###############################
-##### check individual items
+##### Identify issued items
 ###############################   
 
 def find_check_item(month_merge:pyspark.sql.dataframe.DataFrame, 
-                    dist_df:pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
+                    dist_df:pyspark.sql.dataframe.DataFrame,
+                    output_columns: list) -> pyspark.sql.dataframe.DataFrame:
     """
-    checked item
+    checked item:
+       The items are in distribution report, but have no sales from Apr-Sep
     """
     check_df = dist_df.join(month_merge, on=["MatID"], how="left").fillna(0, subset=['totalMonthlyGrossSale']) 
     check_item = check_df.filter(check_df.totalMonthlyGrossSale == 0)
-    check_item = check_item.select('SKU', 'MatID', 'month', 'Price', 'Facings', 'Capacity','Classification', 
-                               'SubCategory', 'totalMonthlyNetSale', 'totalMonthlyQtySold', 'SellMargin')
+    check_item = check_item.select(output_columns)
     return check_item
 
 
 def find_removed_item(month_merge_late:pyspark.sql.dataframe.DataFrame,
                       month_merge_early:pyspark.sql.dataframe.DataFrame,
-                      dist_df:pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
+                      dist_df:pyspark.sql.dataframe.DataFrame,
+                      output_columns: list) -> pyspark.sql.dataframe.DataFrame:
     """
-    removed item
+    removed item:
+       The items are in distribution report, but have no sales from July-Sep
     """
     Removed_df = dist_df.join(month_merge_late, on=["MatID"], how="left").fillna(0, subset=['totalMonthlyGrossSale'])
     Removed_df = dist_df.join(month_merge_early, on=["MatID"], how="inner").fillna(0, subset=['totalMonthlyGrossSale'])
     Removed_item = Removed_df.filter(Removed_df.totalMonthlyGrossSale == 0)
-    Removed_item = Removed_item.select('SKU', 'MatID', 'month', 'Price', 'Facings', 'Capacity','Classification', 
-                               'SubCategory', 'totalMonthlyNetSale', 'totalMonthlyQtySold', 'SellMargin')
+    Removed_item = Removed_item.select(output_columns)
     return Removed_item
 
 
 def find_new_item(month_merge_late:pyspark.sql.dataframe.DataFrame,
-                 dist_df:pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
+                 dist_df:pyspark.sql.dataframe.DataFrame,
+                 output_columns: list) -> pyspark.sql.dataframe.DataFrame:
     """
-    new item
+    new item: 
+        The items are not in distribution report, but have sale history from July-Sep
     """
     New_df = dist_df.join(month_merge_late, on=["MatID"], how="right").fillna(0, subset=['totalMonthlyGrossSale'])
     New_item = New_df.filter(New_df.totalMonthlyGrossSale != 0) # new item is sold during July- Sep
     New_item = New_item.filter(col("Classification").isNull()) # new item has no classification records
-    New_item = New_item.select('SKU', 'MatID', 'month', 'Price', 'Facings', 'Capacity','Classification', 
-                                   'SubCategory', 'totalMonthlyNetSale', 'totalMonthlyQtySold', 'SellMargin')
+    New_item = New_item.select(output_columns)
     return New_item 
+
+
+def find_Incorrect_record_items(month_merge: pyspark.sql.dataframe.DataFrame, 
+                                output_columns: list) -> pyspark.sql.dataframe.DataFrame:
+    """
+    The items has extremely high ratio of capacity/facing. (Ratio >6)
+    """
+    Incorrect_record_items = month_merge.filter(col('Capacity')/col('Facings') >6)
+    Incorrect_record_items = Incorrect_record_items.withColumn("Depth", col('Capacity') / col('Facings')).select(output_columns)
+    return Incorrect_record_items
+
+
+def find_Depth2_items(month_merge: pyspark.sql.dataframe.DataFrame, 
+                                output_columns: list) -> pyspark.sql.dataframe.DataFrame:
+    """
+    same as Capacity < Facings*2. They are issued items: for example:
+       1. Capacity = Facings = 1, incorrect
+       2. Facing = 3, Capacity = 5, incorrect
+       3. Capacity should > Facing. 
+    """
+    Depth2_items = month_merge.filter(col('Capacity')/col('Facings') <2)
+    Depth2_items = Depth2_items.withColumn("Depth", col('Capacity') / col('Facings')).select(output_columns)
+    return Depth2_items
+
+def Identify_and_output_issused_items(month_merge: pyspark.sql.dataframe.DataFrame, 
+                                      month_merge_early: pyspark.sql.dataframe.DataFrame, 
+                                      month_merge_late: pyspark.sql.dataframe.DataFrame,
+                                      dist_df: pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
+    """
+    Identify 5 kinds of issued items:
+       1. check_item
+       2. Removed_item
+       3. New_item
+       4. Incorrect_record_items
+       5. Depth2_items
+       
+    Save them as 5 csv files into Output/IssuedItem folder
+    """
+    output_columns = ['SKU', 'MatID', 'month', 'Price', 'Facings', 'Capacity','POGS','Classification', 
+                  'SubCategory', 'totalMonthlyNetSale', 'totalMonthlyQtySold', 'SellMargin']
+    
+    ## check_item
+    check_item = find_check_item(month_merge, dist_df, output_columns)
+    Removed_item = find_removed_item(month_merge_late, month_merge_early, dist_df, output_columns)
+    New_item  = find_new_item(month_merge_late, dist_df, output_columns)
+
+    ## Removed_item
+    Removed_item = Removed_item.toPandas()
+    print("Find {} Removed items, save them in Output/IssuedItem/removed_SKU.csv".format(len(Removed_item)))
+    Removed_item.to_csv('../data/Output/IssuedItem/removed_SKU.csv', 
+                                 index=False, encoding='utf-8')
+    ## New_item
+    New_item = New_item.toPandas()
+    print("Find {} New items, save them in Output/IssuedItem/new_SKU.csv".format(len(New_item)))
+    New_item.to_csv('../data/Output/IssuedItem/new_SKU.csv', 
+                                 index=False, encoding='utf-8')
+    
+    check_item = check_item.toPandas()
+    print("Find {} checked items, save them in Output/IssuedItem/checked_SKU.csv".format(len(check_item)))
+    check_item.to_csv('../data/Output/IssuedItem/checked_SKU.csv', 
+                                 index=False, encoding='utf-8')
+  
+    # Join the DataFrames
+    month_merge = dist_df.join(month_merge_late, on="MatID", how="inner")
+    
+    # Define the output columns we want to keep in the output dataset
+    output_columns2 = ['MatID','SKU','Facings','Capacity','POGS', 'Depth','DaysSupply','Classification',
+                      'month','SubCategory', 'Vendor', 'totalMonthlyNetSale', 'totalMonthlyGrossSale',
+                      'avgCOGS','totalMonthlyQtySold','Price','SellMargin','avgFrontMargin']
+    ## Incorrect_record_items
+    Incorrect_record_items = find_Incorrect_record_items(month_merge, output_columns2).toPandas()
+    print("Find {} Incorrect_record_items, save them in Output/IssuedItem/Incorrect_record_items.csv".format(len(Incorrect_record_items)))
+    Incorrect_record_items.to_csv('../data/Output/IssuedItem/Incorrect_record_items.csv', 
+                                 index=False, encoding='utf-8')
+    ## Depth less than 2 items
+    Depth2_items = find_Depth2_items(month_merge, output_columns2).toPandas()
+    print("Find {} Depth < 2 items, save them in Output/IssuedItem/Depth2_items.csv".format(len(Depth2_items)))
+    Depth2_items.to_csv('../data/Output/IssuedItem/Depth2_items.csv', 
+                                 index=False, encoding='utf-8')
+    return month_merge # full dataset
+
+######################
+## atLeastOneMonth_SKU
+######################
+def find_and_analysis_atLeastOneMonth_SKU(df: pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
+    """
+    For SKU, which "soldQty < capacity" in at least one month,
+       1. Calcuaate the average of REAL NS, Standard dev of avg NS;
+          REAL NS means that if one item has 0 sale on one month, avg calculation will only consider another 2 months
+       2. Calculate Capacity_to_avg_qty, and Facing_to_avg_qty
+    
+    Output: 2 dataset: 
+       1. df_atLeastOneMonth: fulldataset
+       1. unchange Depth SKU
+       2. Changed Depth SKU
+    """  
+
+    
+    ## Find at least one month SKU
+    df = df.withColumn('qty_less_than_capacity', when((col("totalMonthlyQtySold") < col('Capacity')) , 1).otherwise(0))
+    df_atLeastOneMonth = df.filter(df.qty_less_than_capacity == 1) # find SKU which qtySold> capacity at least on month
+    
+    ## Calculate the average of REAL NS;
+    df_groupbySKU = df.filter(df.totalMonthlyNetSale !=0).groupBy('MatID',"SubCategory", 'Vendor') # Group by each SKU
+    ## get the average net-sales of each product 
+    SKU_avg_Qty = df_groupbySKU.avg("totalMonthlyQtySold").withColumnRenamed("avg(totalMonthlyQtySold)", "AvgQtySold")
+    SKU_avg_std = df_groupbySKU.agg(stddev('totalMonthlyQtySold'))\
+    .withColumnRenamed('stddev_samp(totalMonthlyQtySold)', "Qty_std_by_SKU")
+    
+    
+    ## Join datasets 
+    df_1 = SKU_avg_Qty.join(df_atLeastOneMonth, on=["MatID", 'SubCategory', 'Vendor'], how="right")
+    df_1 = df_1.join(SKU_avg_std, on=["MatID", 'SubCategory', 'Vendor'], how="left")
+    df_1 = df_1.withColumn('Capacity_to_avg_qty',(col('Capacity') / col("AvgQtySold")))
+    df_1 = df_1.withColumn('Facing_to_avg_qty',(col('Facings') / col("AvgQtySold")))
+    # Calculate the ratio of average qty sold to the std of SKU
+    df_1 = df_1.withColumn('StdQty_to_AvgQty',(col('Qty_std_by_SKU') /col("AvgQtySold")))
+    
+    # if no standard derivation, means that this SKU is sold only one month
+    df_full = df_1.select('MatID','SKU', 'Vendor','SubCategory', 'Classification','Facings', 
+                                        'Depth', 'ProposedDepth', 'VarianceDepth','Capacity','Capacity_to_avg_qty', 
+                                        'Facing_to_avg_qty','AvgQtySold', 'Qty_std_by_SKU','StdQty_to_AvgQty').dropDuplicates()
+    # separate SKU to 2 groups
+    unchanged_SKU = df_full.filter(col('Depth') < 3)
+    changed_SKU = df_full.filter(col('ProposedDepth') == 3)
+    
+    return df_atLeastOneMonth, unchanged_SKU, changed_SKU 
+
+def Group_and_save_atLeastOneMonth_SKU(unchanged_SKU: pyspark.sql.dataframe.DataFrame, 
+                                       changed_SKU: pyspark.sql.dataframe.DataFrame):
+    """
+    Separate unadjusted SKU to three sheets within same excel file: Capacity_to_avg_qty<3, 
+                                             Capacity_to_avg_qty<9 and Capacity_to_avg_qty>=3,
+                                             Capacity_to_avg_qty>=9
+                                            
+    """
+    # Separate SKU and save to excel files.
+    changed_SKU.toPandas().to_csv('../data/Output/atLeastOneMonth/adjusted_SKU.csv', 
+                                 index=False, encoding='utf-8')
+    print("Save adjusted SKU(atLeastOneMonth) to Output/atLeastOneMonth/adjusted_SKU.csv")
+    
+    unchanged_SKU = unchanged_SKU.toPandas()
+    unchanged_SKU1 = unchanged_SKU.query('Capacity_to_avg_qty<3')
+    unchanged_SKU2 = unchanged_SKU.query('Capacity_to_avg_qty<9 and Capacity_to_avg_qty>=3')
+    unchanged_SKU3 = unchanged_SKU.query('Capacity_to_avg_qty>=9')
+    writer = ExcelWriter('../data/Output/atLeastOneMonth/unadjusted_SKU.xlsx')
+    unchanged_SKU1.to_excel(writer, 'lessThan3', index=False)
+    unchanged_SKU2.to_excel(writer, 'between3And9', index=False)
+    unchanged_SKU3.to_excel(writer, 'moreThan9', index=False)
+    writer.save()
+    print("Save unadjusted SKU(atLeastOneMonth) to Output/atLeastOneMonth/unadjusted_SKU.xlsx")
+
+######################
+### full month SKU
+#####################
+def find_and_analysis_fullMonth_SKU(df_atLeastOneMonth: pyspark.sql.dataframe.DataFrame, 
+                                    split_month:int, spark) -> pyspark.sql.dataframe.DataFrame:
+    """
+    Find SKU, which "soldQty < capacity" in every month
+    """
+    full_month_items = select_full_month_item(df_atLeastOneMonth.toPandas(), month_list = [split_month, 
+                                                                split_month+1, split_month+2]) # three month data since split_month
+    selected_column = ['MatID','SKU', 'month', 'Vendor','SubCategory', 'Classification','Facings', 
+                                    'Depth','Capacity', 'ProposedDepth', 'VarianceDepth','Capacity_to_qty',
+                                    'totalMonthlyNetSale', 'totalMonthlyGrossSale',
+                                    'totalMonthlyQtySold', 'Price', 'SellMargin',
+                                    'Qty_GeoMean_by_month_Subcat', 'NS_GeoMean_by_month_Subcat',
+                                    'Qty_mean_by_month_Subcat', 'NS_mean_by_month_Subcat',
+                                    'Qty_std_by_month_Subcat', 'NS_std_by_month_Subcat']
+    full_month_SKU_info = get_full_month_SKU_info(full_month_items, 
+                                                  df_atLeastOneMonth.select(selected_column), spark).dropDuplicates()
+    
+    return full_month_SKU_info
+
+
+def save_fullMonth_SKU(full_month_SKU_info):
+    full_month_SKU_info.toPandas().to_csv('../data/Output/fullMonth/qty_less_than_capacity_all_month_SKU.csv', 
+                             index=False, encoding='utf-8')
+    print("Save fullMonth SKU to Output/fullMonth/qty_less_than_capacity_all_month_SKU.csv")
+
+################
+## EDA Analysis
+################
 
 def explain_distinct_mean():
     """
@@ -245,17 +487,17 @@ def find_monthly_qty_less_items(df, column, time = 1, class_choice = 'Classifica
     fig.tight_layout()
     plt.show()
     
-    return df1
+    return df1, pdf2
 
 
-def select_full_month_item(data, month_list):
+def select_full_month_item(data: pandas.core.frame.DataFrame, month_list) -> pandas.core.frame.DataFrame:
     """
     select items which shows in all three months
     """
     df = data.copy()
-    df1 = df[df.month == str(month_list[0])]
-    df2 = df[df.month == str(month_list[1])]
-    df3 = df[df.month == str(month_list[2])]
+    df1 = df[df.month == int(month_list[0])]
+    df2 = df[df.month == int(month_list[1])]
+    df3 = df[df.month == int(month_list[2])]
     df_full = pd.merge(df1, df2, on = 'SKU', how='inner')
     df_full = pd.merge(df_full, df3, on = 'SKU', how='inner')
     total_SKU = df_full.SKU.unique()
@@ -264,27 +506,6 @@ def select_full_month_item(data, month_list):
     df = df[df['SKU'].isin(total_SKU)]
 
     return df
-
-def find_too_high_facing_items(df, class_choice = 'Classification'):
-    """
-    Identify items facing is above 95% items, but qty sold is less than 85% items.
-    """
-    
-    facing_threshold = df.approxQuantile('Facings',[0.95],0.01)[0] # 0.01 is relativeError
-    qty_threshold = df.approxQuantile('totalMonthlyQtySold',[0.85],0.01)[0]
-    print("The 95% facing is {}".format(facing_threshold))
-    print("The 85% qty sold is {}".format(qty_threshold))
-    high_facing = df[df.Facings > facing_threshold]
-    high_facing = high_facing[high_facing.totalQtySold < qty_threshold]
-    
-    pdf1 = high_facing.toPandas() 
-    plt.figure(figsize=(18,8))
-    ax = sns.scatterplot(x="Facings", y="totalMonthlyQtySold", hue = class_choice,
-                    data=pdf1)
-    ax.set_title("Facings VS QtySold for items with too high facing", fontsize=20)
-    plt.show()
-    
-    return high_facing
 
 
 ############
@@ -317,8 +538,8 @@ def find_monthly_qty_less_items_4_group(df, column, class_choice = 'Classificati
     # Separate group
     #################
     # group 0: monthly total qty sold is no less than class_choice
-    df0 = df.withColumn('qty_less_than_facing', when((col("totalMonthlyQtySold") > col(column)) , 1).otherwise(0))
-    df0  = df0.filter(df0.qty_less_than_facing == 1)
+    df0 = df.withColumn('qty_less_than_column', when((col("totalMonthlyQtySold") > col(column)) , 1).otherwise(0))
+    df0  = df0.filter(df0.qty_less_than_column == 1)
     
     # group 4: column > (monthly total sold qty *4)
     df4 = df.withColumn('qty_less_than_column4', when((col("totalMonthlyQtySold")* 4 < col(column)) , 1).otherwise(0))
@@ -334,6 +555,7 @@ def find_monthly_qty_less_items_4_group(df, column, class_choice = 'Classificati
     df1 = group_data_by_threshold(column, df, 1, 2)
     
     print()
+    print('🚩 Group 1: ')
     print_content = "(monthly total sold qty *2) > " + str(column) + ">= (monthly total sold qty *1)"
     print(print_content)
     plot_monthly_data(df1, "SubCategory", column)
@@ -342,6 +564,7 @@ def find_monthly_qty_less_items_4_group(df, column, class_choice = 'Classificati
     print("Details for other columns")
     plot_monthly_bar_plot(df1, "SubCategory", column)
     print()
+    print('🚩 Group 2: ')
     print_content = "(monthly total sold qty *3) > " + str(column) + ">= (monthly total sold qty *2)"
     print(print_content)
     plot_monthly_data(df2, "SubCategory", column)
@@ -350,6 +573,7 @@ def find_monthly_qty_less_items_4_group(df, column, class_choice = 'Classificati
     print("Details for other columns")
     plot_monthly_bar_plot(df2, "SubCategory", column)
     print()
+    print('🚩 Group 3: ')
     print_content = "(monthly total sold qty *4) > " + str(column) + ">= (monthly total sold qty *3)"
     print(print_content)
     plot_monthly_data(df3, "SubCategory", column)
@@ -358,6 +582,7 @@ def find_monthly_qty_less_items_4_group(df, column, class_choice = 'Classificati
     print("Details for other columns")
     plot_monthly_bar_plot(df3, "SubCategory", column)
     print()
+    print('🚩 Group 4: ')
     print_content = str(column) + "> (monthly total sold qty *4)"
     print(print_content)
     plot_monthly_data(df4, "SubCategory", column)
@@ -392,34 +617,68 @@ def plot_monthly_bar_plot(df, class_choice, column):
     
     df = df.toPandas() 
     
-    fig, axes = plt.subplots(figsize=(15,5))
+    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(18,10))
     df1 = pd.DataFrame(df.groupby([class_choice,'month'])['SellMargin'].sum()).reset_index()
-    axes = sns.barplot(x=class_choice, y='SellMargin', hue='month', data=df1)
-    plt.show()
+    sns.barplot(x=class_choice, y='SellMargin', hue='month', data=df1, ax = axes[0,0])
     
-    fig, axes = plt.subplots(figsize=(15,5))
     df2 = pd.DataFrame(df.groupby([class_choice,'month'])['totalMonthlyNetSale'].sum()).reset_index()
-    axes = sns.barplot(x=class_choice, y='totalMonthlyNetSale', hue='month', data=df2)
-    plt.show()
+    sns.barplot(x=class_choice, y='totalMonthlyNetSale', hue='month', data=df2, ax = axes[0,1])
     
-    fig, axes = plt.subplots(figsize=(15,5))
     df3 = pd.DataFrame(df.groupby([class_choice,'month'])['Facings'].sum()).reset_index()
-    axes = sns.barplot(x=class_choice, y='Facings', hue='month', data=df3)
-    plt.show()
+    sns.barplot(x=class_choice, y='Facings', hue='month', data=df3, ax = axes[1,0])
     
-    fig, axes = plt.subplots(figsize=(15,5))
     df4 = pd.DataFrame(df.groupby([class_choice,'month'])['totalMonthlyQtySold'].sum()).reset_index()
-    axes = sns.barplot(x=class_choice, y='totalMonthlyQtySold', hue='month', data=df4)
-    plt.show()
+    sns.barplot(x=class_choice, y='totalMonthlyQtySold', hue='month', data=df4, ax = axes[1,1])
     
     fig.tight_layout()
     plt.show()
     
-    
+def get_full_month_SKU_info(full_month_items: pandas.core.frame.DataFrame, 
+                            Groups_output: pyspark.sql.dataframe.DataFrame,
+                            spark) -> pyspark.sql.dataframe.DataFrame:
+    """
+    Get items which Capacity > monthly Qty Sold in all three months
+    """
+    full_month_SKU = spark.createDataFrame(list(full_month_items['MatID']), StringType()).toDF("MatID")
+    full_month_SKU_info = full_month_SKU.join(Groups_output, on = ['MatID'], how = 'left')
+    # test joined result 
+    #assert full_month_SKU.count()*3 == full_month_SKU_info.count()
+    return full_month_SKU_info    
     
 #####################################
 ### Date Cleaning 
 ####################################
+
+def read_merge_and_clean_data(sales_data_path: str, dist_data_path: str, 
+                              split_month: int, begin_date: str, 
+                              end_date: str, spark) -> pyspark.sql.dataframe.DataFrame:
+    """
+    Read, merge and clean all input datasets
+    
+    Output: three dataframe
+        month_merge: whole dataset
+        month_merge_early: data before split_month
+        month_merge_late: data inlcluded and after split_month
+        dist_df: dataset of distributed report
+    """
+    
+    ## load dataset
+    df = spark.read.csv(sales_data_path, header=True)
+    dist_df = spark.read.csv(dist_data_path, header=True)
+    Subcat_info = spark.read.csv("../data/RawData/SubCateogoryInfo.csv", header=True) 
+    Vendor_info = spark.read.csv("../data/RawData/Vendor_info.csv", header=True) 
+    
+    ## Merge dataset
+    dist_df = clean_dist_df(dist_df)
+    df = Data_clean_and_merge(df, Subcat_info, Vendor_info, begin_date, end_date)
+    month_merge = merge_dataset(df)
+
+    ## Split dataset based on split month
+    month_merge_early = month_merge.filter(month_merge.month < split_month)  # e.g April- June
+    month_merge_late = month_merge.filter(month_merge.month >= split_month)  # e.g July - Sep
+    
+    return month_merge, month_merge_early, month_merge_late, dist_df
+
 
 def convertColumn(df: pyspark.sql.dataframe.DataFrame, names: list, newType) -> pyspark.sql.dataframe.DataFrame:
     """
@@ -479,40 +738,60 @@ def calculate_Capacity_to_sales(df: pyspark.sql.dataframe.DataFrame) -> pyspark.
     """
     df = df.withColumn("Capacity_to_qty", (df.Capacity / df.totalMonthlyQtySold))
     df = df.withColumn("Capacity_to_sales", (df.Capacity / df.totalMonthlyNetSale))
-    return df                                                            
+    return df  
+
+def calculate_Depths(df: pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
+    """
+    Depth =  Capacity / Facings
+    ProposedDepth = 3, if Depth >= 4. Otherwise empty
+    VarianceDepth = ProposedDepth - Depth (should be negative)
+    """
+    df = df.withColumn("Depth", (df.Capacity / df.Facings))
+    df = df.withColumn("ProposedDepth",  when(col('Depth') >=4, 3).otherwise(''))
+    df = df.withColumn("VarianceDepth",  when(col('Depth') >=4, (df.ProposedDepth - df.Depth)).otherwise(''))
+    return df  
 
 
 
 def clean_dist_df(dist_df: pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
     # filter data
-    dist_df = dist_df.select("Name", "Facings", "Capacity", 'Days Supply','Classification', 'Mat ID')
+    dist_df = dist_df.select("Name", "Facings", "Capacity", 'Days Supply','Classification', 'Mat ID', '# POGs')
     
     ### Rename column
     dist_df = dist_df.withColumnRenamed("Name", "SKU")
     dist_df = dist_df.withColumnRenamed("Days Supply", "DaysSupply")
     dist_df = dist_df.withColumnRenamed("Mat ID", "MatID")
+    dist_df = dist_df.withColumnRenamed("# POGs", "POGS")
     
     # Conver columns to `FloatType()`
     dist_df = dist_df.withColumn("Facings", dist_df.Facings.cast('float'))
     dist_df = dist_df.withColumn("Capacity", dist_df.Capacity.cast('float'))
     dist_df = dist_df.withColumn("DaysSupply", dist_df.DaysSupply.cast('float'))
     dist_df = dist_df.withColumn("MatID", dist_df.MatID.cast('integer'))
+    dist_df = dist_df.withColumn("POGS", dist_df.POGS.cast('integer'))
     return dist_df
     
 
 def Data_clean_and_merge(df: pyspark.sql.dataframe.DataFrame,
-                        dist_df: pyspark.sql.dataframe.DataFrame,
-                        Subcat_info: pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataframe.DataFrame:
+                        Subcat_info: pyspark.sql.dataframe.DataFrame, 
+                        Vendor_info: pyspark.sql.dataframe.DataFrame,
+                        begin_date = "2019-04-01", end_date = "2019-10-01") -> pyspark.sql.dataframe.DataFrame:
     # select useful columns
     Subcat_info = Subcat_info.select('SKU', 'SubCategory')
+    Vendor_info = Vendor_info.select('SKU', 'Vendor')
     # clean data entry: remove ID
     split_col = split(Subcat_info['SKU'], '-')
     Subcat_info = Subcat_info.withColumn('MatID', split_col.getItem(0))
     Subcat_info = Subcat_info.withColumn('MatID', regexp_replace(col("MatID"), "[ZNDF]", "")) # remove letters from matID
     
-    split_col = split(Subcat_info['SubCategory'], '-')
-    Subcat_info = Subcat_info.withColumn('SubCategory', split_col.getItem(1))
+    split_col2 = split(Vendor_info['SKU'], '-')
+    Vendor_info = Vendor_info.withColumn('MatID', split_col2.getItem(0))
+    Vendor_info = Vendor_info.withColumn('MatID', regexp_replace(col("MatID"), "[ZNDF]", "")) # remove letters from matID
     
+    split_col = split(Subcat_info['SubCategory'], '-')
+    split_col2 = split(Vendor_info['Vendor'], '-')
+    Subcat_info = Subcat_info.withColumn('SubCategory', split_col.getItem(1))
+    Vendor_info = Vendor_info.withColumn('Vendor', split_col2.getItem(1))
     # filter data
     df = df.select("Date", "Store", 'item','POS Gross Sales', 'POS Net Sales', 'POS Total Discount', 'POS Qty Sold',
                   'POS COGS (INV)')
@@ -528,8 +807,8 @@ def Data_clean_and_merge(df: pyspark.sql.dataframe.DataFrame,
     # filter data, and keep only half years
     # Convert Date column to timestamp 
     df = df.withColumn("Date", to_timestamp(df.Date, "yyyyMM"))
-    df= df.filter(df.Date >= "2019-04-01") 
-    df = df.filter(df.Date < "2019-10-01")  # April - Sep
+    df= df.filter(df.Date >= begin_date) 
+    df = df.filter(df.Date < end_date)  # April - Sep
     
     # separate Item name to SKU and ID
     split_col = split(df['item'], '-')
@@ -563,14 +842,14 @@ def Data_clean_and_merge(df: pyspark.sql.dataframe.DataFrame,
 
     # add subcategory column
     df = df.join(Subcat_info.select("MatID", 'SubCategory'), on=["MatID"], how="left")
-    
+    df = df.join(Vendor_info.select("MatID", 'Vendor'), on=["MatID"], how="left")
     return df
 
 def merge_dataset(df: pyspark.sql.dataframe.DataFrame)-> pyspark.sql.dataframe.DataFrame:
     # Generate sale information for each product in each month
     month_df = df.select('MatID', "SKU", year("Date").alias('year'), month("Date").alias('month'), 
                          'GrossSales', 'NetSales', 'COGS', 'QtySold','Price', 
-                         'SellMargin', 'FrontMargin','SubCategory').groupBy("month",'MatID',"SubCategory")
+                         'SellMargin', 'FrontMargin','SubCategory', 'Vendor').groupBy("month",'MatID',"SubCategory", 'Vendor')
     ## get the average net-sales of each product 
     month_avg_NetSale = month_df.avg("NetSales").withColumnRenamed("avg(NetSales)", "totalMonthlyNetSale")
     ## get the average gross-sales of each product 
@@ -581,11 +860,29 @@ def merge_dataset(df: pyspark.sql.dataframe.DataFrame)-> pyspark.sql.dataframe.D
     month_avg_SM = month_df.avg("SellMargin").withColumnRenamed("avg(SellMargin)", "SellMargin")
     month_avg_FM = month_df.avg("FrontMargin").withColumnRenamed("avg(FrontMargin)", "avgFrontMargin")
     
-    month_merge = month_avg_NetSale.join(month_avg_GrossSale, on=["MatID", 'month','SubCategory'], how="inner")
-    month_merge = month_merge.join(month_avg_COGS, on=["MatID", 'month','SubCategory'], how="inner")
-    month_merge = month_merge.join(month_avg_QtySold, on=["MatID", 'month','SubCategory'], how="inner")
-    month_merge = month_merge.join(month_avg_Price, on=["MatID", 'month','SubCategory'], how="inner")
-    month_merge = month_merge.join(month_avg_SM, on=["MatID", 'month','SubCategory'], how="inner")
-    month_merge = month_merge.join(month_avg_FM, on=["MatID", 'month','SubCategory'], how="inner")
+    month_merge = month_avg_NetSale.join(month_avg_GrossSale, on=["MatID", 'month','SubCategory', 'Vendor'], how="inner")
+    month_merge = month_merge.join(month_avg_COGS, on=["MatID", 'month','SubCategory', 'Vendor'], how="inner")
+    month_merge = month_merge.join(month_avg_QtySold, on=["MatID", 'month','SubCategory', 'Vendor'], how="inner")
+    month_merge = month_merge.join(month_avg_Price, on=["MatID", 'month','SubCategory', 'Vendor'], how="inner")
+    month_merge = month_merge.join(month_avg_SM, on=["MatID", 'month','SubCategory', 'Vendor'], how="inner")
+    month_merge = month_merge.join(month_avg_FM, on=["MatID", 'month','SubCategory', 'Vendor'], how="inner")
     
     return month_merge
+
+
+def user_put():
+    """
+    User Input from interface
+    """
+    sales_data_path = input("""Enter the path of 6 month sales data, 
+    e.g. ../data/RawData/sales_newzealand.csv:""")
+    
+    dist_data_path = input("""Enter the path of disrtibuted report data, 
+    e.g. ../data/RawData/Distribution Report - Auckland Departures - July19.csv or ../data/RawData/Distribution Report- Auckland Departures - Jan2020.csv:""")
+    
+    start_date = input("""Input start date, e.g. 2019-04-01: """)
+    end_date = input("""Input start date, e.g. 2019-10-01: """)
+    split_month = int(input("""Enter the month begin to test, e.g. 7
+    Note that this month must included in sales data , and between start_date and end_date:"""))
+    print('\n\n')
+    return sales_data_path, dist_data_path, start_date, end_date, split_month
