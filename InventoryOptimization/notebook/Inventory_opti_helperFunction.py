@@ -25,6 +25,21 @@ from pandas import ExcelWriter
 #from pyspark.sql.functions import when
 from pyspark.sql.functions import UserDefinedFunction
 import re
+import errno, sys
+
+## selected columns in output files
+# for full month SKU
+selected_column_fullMonth = ['MatID','SKU', 'month', 'Vendor','SubCategory', 'Classification','POGS','Facings', 
+                              'Depth','Capacity', 'ProposedDepth', 'VarianceDepth','Capacity_to_qty',
+                              'totalMonthlyNetSale', 'totalMonthlyGrossSale',
+                              'totalMonthlyQtySold', 'Price', 'SellMargin',
+                              'Qty_GeoMean_by_month_Subcat', 'NS_GeoMean_by_month_Subcat',
+                              'Qty_mean_by_month_Subcat', 'NS_mean_by_month_Subcat',
+                              'Qty_std_by_month_Subcat', 'NS_std_by_month_Subcat']
+# for at least one month SKU
+selected_column_atLeastOneMonth = ['MatID','SKU', 'Vendor','SubCategory', 'Classification','POGS','Facings', 
+                                   'Depth', 'ProposedDepth', 'VarianceDepth','Capacity','Capacity_to_avg_qty', 
+                                   'Facing_to_avg_qty','AvgQtySold', 'Qty_std_by_SKU','StdQty_to_AvgQty']
 
 
 ###############################
@@ -202,7 +217,7 @@ def find_check_item(month_merge:pyspark.sql.dataframe.DataFrame,
                     output_columns: list) -> pyspark.sql.dataframe.DataFrame:
     """
     checked item:
-       The items are in distribution report, but have no sales from Apr-Sep
+       The items are in distribution report, but have no sales from Apr-Sep (or Sep-Nov)
     """
     check_df = dist_df.join(month_merge, on=["MatID"], how="left").fillna(0, subset=['totalMonthlyGrossSale']) 
     check_item = check_df.filter(check_df.totalMonthlyGrossSale == 0)
@@ -216,7 +231,7 @@ def find_removed_item(month_merge_late:pyspark.sql.dataframe.DataFrame,
                       output_columns: list) -> pyspark.sql.dataframe.DataFrame:
     """
     removed item:
-       The items are in distribution report, but have no sales from July-Sep
+       The items are in distribution report, but have no sales from July-Sep (or Sep-Nov)
     """
     Removed_df = dist_df.join(month_merge_late, on=["MatID"], how="left").fillna(0, subset=['totalMonthlyGrossSale'])
     Removed_df = dist_df.join(month_merge_early, on=["MatID"], how="inner").fillna(0, subset=['totalMonthlyGrossSale'])
@@ -230,7 +245,7 @@ def find_new_item(month_merge_late:pyspark.sql.dataframe.DataFrame,
                  output_columns: list) -> pyspark.sql.dataframe.DataFrame:
     """
     new item: 
-        The items are not in distribution report, but have sale history from July-Sep
+        The items are not in distribution report, but have sale history from July-Sep (or Sep-Nov)
     """
     New_df = dist_df.join(month_merge_late, on=["MatID"], how="right").fillna(0, subset=['totalMonthlyGrossSale'])
     New_item = New_df.filter(New_df.totalMonthlyGrossSale != 0) # new item is sold during July- Sep
@@ -275,8 +290,15 @@ def Identify_and_output_issused_items(month_merge: pyspark.sql.dataframe.DataFra
        
     Save them as 5 csv files into Output/IssuedItem folder
     """
-    output_columns = ['SKU', 'MatID', 'month', 'Price', 'Facings', 'Capacity','POGS','Classification', 
+    ## Define the output columns we want to keep in the output dataset
+    # for check_item, Removed_item, and New_item
+    output_columns = ['SKU', 'MatID', 'month', 'Price', 'POGS','Facings', 'Capacity','Classification', 
                   'SubCategory', 'totalMonthlyNetSale', 'totalMonthlyQtySold', 'SellMargin']
+    
+    # for Incorrect_record_items, and Depth2_items
+    output_columns2 = ['MatID','SKU','Facings','Capacity','POGS', 'Depth','DaysSupply','Classification',
+                      'month','SubCategory', 'Vendor', 'totalMonthlyNetSale', 'totalMonthlyGrossSale',
+                      'avgCOGS','totalMonthlyQtySold','Price','SellMargin','avgFrontMargin']
     
     ## check_item
     check_item = find_check_item(month_merge, dist_df, output_columns)
@@ -285,35 +307,31 @@ def Identify_and_output_issused_items(month_merge: pyspark.sql.dataframe.DataFra
 
     ## Removed_item
     Removed_item = Removed_item.toPandas()
-    print("Find {} Removed items, save them in Output/IssuedItem/removed_SKU.csv".format(len(Removed_item)))
+    print("Find {} Removed items, save them in Output/IssuedItem/removed_SKU.csv".format(len(Removed_item['MatID'].unique())))
     Removed_item.to_csv('../data/Output/IssuedItem/removed_SKU.csv', 
                                  index=False, encoding='utf-8')
     ## New_item
     New_item = New_item.toPandas()
-    print("Find {} New items, save them in Output/IssuedItem/new_SKU.csv".format(len(New_item)))
+    print("Find {} New items, save them in Output/IssuedItem/new_SKU.csv".format(New_item['MatID'].nunique()))
     New_item.to_csv('../data/Output/IssuedItem/new_SKU.csv', 
                                  index=False, encoding='utf-8')
     
     check_item = check_item.toPandas()
-    print("Find {} checked items, save them in Output/IssuedItem/checked_SKU.csv".format(len(check_item)))
+    print("Find {} checked items, save them in Output/IssuedItem/checked_SKU.csv".format(len(check_item['MatID'].unique())))
     check_item.to_csv('../data/Output/IssuedItem/checked_SKU.csv', 
                                  index=False, encoding='utf-8')
   
     # Join the DataFrames
     month_merge = dist_df.join(month_merge_late, on="MatID", how="inner")
     
-    # Define the output columns we want to keep in the output dataset
-    output_columns2 = ['MatID','SKU','Facings','Capacity','POGS', 'Depth','DaysSupply','Classification',
-                      'month','SubCategory', 'Vendor', 'totalMonthlyNetSale', 'totalMonthlyGrossSale',
-                      'avgCOGS','totalMonthlyQtySold','Price','SellMargin','avgFrontMargin']
     ## Incorrect_record_items
     Incorrect_record_items = find_Incorrect_record_items(month_merge, output_columns2).toPandas()
-    print("Find {} Incorrect_record_items, save them in Output/IssuedItem/Incorrect_record_items.csv".format(len(Incorrect_record_items)))
+    print("Find {} Incorrect_record_items, save them in Output/IssuedItem/Incorrect_record_items.csv".format(len(Incorrect_record_items['MatID'].unique())))
     Incorrect_record_items.to_csv('../data/Output/IssuedItem/Incorrect_record_items.csv', 
                                  index=False, encoding='utf-8')
     ## Depth less than 2 items
     Depth2_items = find_Depth2_items(month_merge, output_columns2).toPandas()
-    print("Find {} Depth < 2 items, save them in Output/IssuedItem/Depth2_items.csv".format(len(Depth2_items)))
+    print("Find {} Depth < 2 items, save them in Output/IssuedItem/Depth2_items.csv".format(len(Depth2_items['MatID'].unique())))
     Depth2_items.to_csv('../data/Output/IssuedItem/Depth2_items.csv', 
                                  index=False, encoding='utf-8')
     return month_merge # full dataset
@@ -330,8 +348,9 @@ def find_and_analysis_atLeastOneMonth_SKU(df: pyspark.sql.dataframe.DataFrame) -
     
     Output: 2 dataset: 
        1. df_atLeastOneMonth: fulldataset
-       1. unchange Depth SKU
-       2. Changed Depth SKU
+       2. unchange Depth SKU
+       3. Changed Depth SKU
+       4. df_full is the combination of unchanged_SKU and changed_SKU
     """  
 
     
@@ -355,15 +374,14 @@ def find_and_analysis_atLeastOneMonth_SKU(df: pyspark.sql.dataframe.DataFrame) -
     # Calculate the ratio of average qty sold to the std of SKU
     df_1 = df_1.withColumn('StdQty_to_AvgQty',(col('Qty_std_by_SKU') /col("AvgQtySold")))
     
+    
     # if no standard derivation, means that this SKU is sold only one month
-    df_full = df_1.select('MatID','SKU', 'Vendor','SubCategory', 'Classification','Facings', 
-                                        'Depth', 'ProposedDepth', 'VarianceDepth','Capacity','Capacity_to_avg_qty', 
-                                        'Facing_to_avg_qty','AvgQtySold', 'Qty_std_by_SKU','StdQty_to_AvgQty').dropDuplicates()
+    df_full = df_1.select(selected_column_atLeastOneMonth).dropDuplicates()
     # separate SKU to 2 groups
     unchanged_SKU = df_full.filter(col('Depth') < 3)
     changed_SKU = df_full.filter(col('ProposedDepth') == 3)
     
-    return df_atLeastOneMonth, unchanged_SKU, changed_SKU 
+    return df_atLeastOneMonth, unchanged_SKU, changed_SKU, df_full 
 
 def Group_and_save_atLeastOneMonth_SKU(unchanged_SKU: pyspark.sql.dataframe.DataFrame, 
                                        changed_SKU: pyspark.sql.dataframe.DataFrame):
@@ -399,15 +417,8 @@ def find_and_analysis_fullMonth_SKU(df_atLeastOneMonth: pyspark.sql.dataframe.Da
     """
     full_month_items = select_full_month_item(df_atLeastOneMonth.toPandas(), month_list = [split_month, 
                                                                 split_month+1, split_month+2]) # three month data since split_month
-    selected_column = ['MatID','SKU', 'month', 'Vendor','SubCategory', 'Classification','Facings', 
-                                    'Depth','Capacity', 'ProposedDepth', 'VarianceDepth','Capacity_to_qty',
-                                    'totalMonthlyNetSale', 'totalMonthlyGrossSale',
-                                    'totalMonthlyQtySold', 'Price', 'SellMargin',
-                                    'Qty_GeoMean_by_month_Subcat', 'NS_GeoMean_by_month_Subcat',
-                                    'Qty_mean_by_month_Subcat', 'NS_mean_by_month_Subcat',
-                                    'Qty_std_by_month_Subcat', 'NS_std_by_month_Subcat']
     full_month_SKU_info = get_full_month_SKU_info(full_month_items, 
-                                                  df_atLeastOneMonth.select(selected_column), spark).dropDuplicates()
+                                                  df_atLeastOneMonth.select(selected_column_fullMonth), spark).dropDuplicates()
     
     return full_month_SKU_info
 
@@ -651,7 +662,7 @@ def get_full_month_SKU_info(full_month_items: pandas.core.frame.DataFrame,
 
 def read_merge_and_clean_data(sales_data_path: str, dist_data_path: str, 
                               split_month: int, begin_date: str, 
-                              end_date: str, spark) -> pyspark.sql.dataframe.DataFrame:
+                              end_date: str, store_name: str, spark) -> pyspark.sql.dataframe.DataFrame:
     """
     Read, merge and clean all input datasets
     
@@ -670,7 +681,7 @@ def read_merge_and_clean_data(sales_data_path: str, dist_data_path: str,
     
     ## Merge dataset
     dist_df = clean_dist_df(dist_df)
-    df = Data_clean_and_merge(df, Subcat_info, Vendor_info, begin_date, end_date)
+    df = Data_clean_and_merge(df, Subcat_info, Vendor_info, store_name, begin_date, end_date)
     month_merge = merge_dataset(df)
 
     ## Split dataset based on split month
@@ -775,6 +786,7 @@ def clean_dist_df(dist_df: pyspark.sql.dataframe.DataFrame) -> pyspark.sql.dataf
 def Data_clean_and_merge(df: pyspark.sql.dataframe.DataFrame,
                         Subcat_info: pyspark.sql.dataframe.DataFrame, 
                         Vendor_info: pyspark.sql.dataframe.DataFrame,
+                        store_name: str,
                         begin_date = "2019-04-01", end_date = "2019-10-01") -> pyspark.sql.dataframe.DataFrame:
     # select useful columns
     Subcat_info = Subcat_info.select('SKU', 'SubCategory')
@@ -797,7 +809,7 @@ def Data_clean_and_merge(df: pyspark.sql.dataframe.DataFrame,
                   'POS COGS (INV)')
     
     # Check only one store
-    df = df.filter(df.Store == "NZDF.AKL108")
+    df = df.filter(df.Store == store_name)
     
     # Remove comma from integer (e.g. 1,333 to 1333)
     udf = UserDefinedFunction(lambda x: re.sub(',','',x), StringType())
@@ -874,15 +886,52 @@ def user_put():
     """
     User Input from interface
     """
+    print("""
+📌Notes:
+1. The sales_newzealand.csv must have the sales data from the store you want to test: (NZDF.AKL108 or NZDF.AKL109 or both)
+
+2. The decision of start date is based on the "generating date of Distribution Report".
+
+3. If start date is 2019-04-01, then end_date will be 2019-10-01, the month begin to test is July. 
+   If start date is 2019-06-01, then end_date will be 2019-12-01, the month begin to test is Sep. 
+   
+4. The file name of Distribution Report must contain 'Departures' or 'Arrivals':
+   Departures: NZDF.AKL108
+   Arrivals: NZDF.AKL109
+   
+5. The output folder name is ‘Output’ only. Remeber rename it to distinguish different input data: 
+   for example: Rename to Output_Sep_108, Output_July_108, Output_Sep_109
+   
+    """)
     sales_data_path = input("""Enter the path of 6 month sales data, 
     e.g. ../data/RawData/sales_newzealand.csv:""")
     
     dist_data_path = input("""Enter the path of disrtibuted report data, 
-    e.g. ../data/RawData/Distribution Report - Auckland Departures - July19.csv or ../data/RawData/Distribution Report- Auckland Departures - Jan2020.csv:""")
+    e.g. ../data/RawData/Distribution Report - Auckland Departures - July19.csv or ../data/RawData/Distribution Report- Auckland Departures - Jan2020.csv or ../data/RawData/Distribution Report-AKL Arrivals-Jan 2020.csv:""")
+
+    # test given store and distribution report is correct
+    if ('Arrivals' not in dist_data_path and 'Departures' not in dist_data_path):
+        print("\n ❌ERROR: file name of Distribution Report must contain 'Departures' or 'Arrivals'")
+        sys.exit(errno.EACCES)
+        
+    elif 'Arrivals' in dist_data_path:
+        store_name = 'NZDF.AKL109'
+    else: # Departures
+        store_name = 'NZDF.AKL108'
+    print("Store name is {}".format(store_name))
+          
+    start_date = input("""Input start date, 2019-04-01 or 2019-06-01: """)
     
-    start_date = input("""Input start date, e.g. 2019-04-01: """)
-    end_date = input("""Input start date, e.g. 2019-10-01: """)
-    split_month = int(input("""Enter the month begin to test, e.g. 7
-    Note that this month must included in sales data , and between start_date and end_date:"""))
-    print('\n\n')
-    return sales_data_path, dist_data_path, start_date, end_date, split_month
+    # genterate end_date
+    if start_date == '2019-04-01':
+        end_date = '2019-10-01'
+        split_month = 7
+    elif start_date == '2019-06-01':
+        end_date = '2019-12-01'
+        split_month = 9
+    else:
+        print("\n ❌ERROR: Start date must be 2019-06-01 or 2019-06-01")
+        sys.exit(errno.EACCES)
+    print('end date is {},  the month begin to test is {}\n\n'.format(end_date, split_month))
+   
+    return sales_data_path, dist_data_path, start_date, end_date, split_month, store_name
